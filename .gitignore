@@ -6,6 +6,15 @@
 !docs/**
 !scripts/
 !scripts/**
+!config/
+!config/**
+!envs/
+!envs/**
+!tests/
+!tests/**
+# 데이터·결과는 절대 추적하지 않음
+run/
+data/
 # 데이터·중간산출물은 절대 올리지 않음
 *.h5ad
 *.rds

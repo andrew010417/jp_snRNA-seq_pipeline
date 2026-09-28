@@ -1,0 +1,65 @@
+# snRNA-seq 파이프라인 설정 — 이 파일만 고치면 됩니다.
+
+paths:
+  # 샘플별 10x 출력 폴더들이 들어 있는 상위 폴더
+  #   input_dir/
+  #     ├── SAMPLE_A/{barcodes.tsv.gz, features.tsv.gz, matrix.mtx.gz}
+  #     └── SAMPLE_B/...
+  input_dir: "data/raw"
+  out_dir:   "run"
+
+project:
+  name: "snRNAseq"
+  species: "human"          # human | mouse — 미토콘드리아 패턴 결정
+  seed: 42
+
+qc:
+  min_features: 200         # 이보다 유전자가 적게 잡힌 핵은 제외
+  min_counts: 500           # 이보다 UMI가 적은 핵은 제외
+  # snRNA에서 percent_mt는 거의 0이어야 정상입니다(핵에 미토콘드리아 없음).
+  # 아래 값은 "세포질 오염" 상한입니다. scRNA의 10~20%를 그대로 쓰지 마세요.
+  max_percent_mt: 5
+  # 샘플별 중앙값 기준 필터를 쓰려면 true (Hong et al. 방식)
+  use_median_ratio: false
+  median_ratio: 0.2
+  min_cells_per_gene: 3     # 이보다 적은 핵에서만 검출된 유전자는 제외
+
+doublet:
+  enabled: true
+  pN: 0.25                  # DoubletFinder 기본값 (결과에 거의 영향 없음)
+  pcs: 10                   # paramSweep에 쓸 PC 수
+  # 기대 더블렛 비율: 10x Chromium 3' v3 로딩 표에서 자동 계산
+  # 직접 지정하려면 fixed_rate 에 숫자(예: 0.05)를 넣으세요. null이면 자동.
+  fixed_rate: null
+
+normalization:
+  method: "scran"           # scran | lognormalize
+  # scran: 비슷한 핵끼리 묶어 size factor 추정 → 희소한 데이터에 강함
+  # lognormalize: Seurat 기본. 빠름
+
+features:
+  n_hvg: 2000
+  vars_to_regress: []       # 예: ["nCount_RNA", "percent_mt"]
+
+reduction:
+  n_pcs: 30                 # PCA 차원 수. Elbow plot을 보고 조정하세요
+
+batch:
+  method: "harmony"         # harmony | rpca | none
+  key: "sample"             # 배치를 나누는 메타데이터 컬럼
+
+cluster:
+  algorithm: "louvain"      # louvain | leiden
+  resolutions: [0.1, 0.2, 0.4, 0.6, 0.8, 1.0]
+  select: 0.4               # 최종적으로 쓸 해상도
+  k_param: 20
+
+umap:
+  n_neighbors: 30
+  min_dist: 0.3
+  metric: "cosine"
+
+markers:
+  logfc_threshold: 0.25
+  min_pct: 0.1
+  top_n: 20                 # 클러스터별로 저장할 상위 마커 수

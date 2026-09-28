@@ -125,16 +125,113 @@ Hong et al., *Nature Genetics* 2025 — 간 조직 48명 snRNA-seq
 
 ---
 
-## 상태
+## 쓰는 법
 
-현재는 **문서 단계**입니다. 실행 스크립트는 아직 없습니다.
+### 1. 설치
 
-| 항목 | 상태 |
+```bash
+Rscript envs/install.R
+```
+자세한 내용은 [envs/README.md](envs/README.md)
+
+### 2. 데이터 놓기
+
+샘플 하나당 폴더 하나입니다. Cell Ranger 출력을 그대로 넣으면 됩니다.
+
+```
+data/raw/
+├── SAMPLE_A/
+│   ├── barcodes.tsv.gz
+│   ├── features.tsv.gz
+│   └── matrix.mtx.gz
+└── SAMPLE_B/ ...
+```
+
+### 3. 설정 고치기
+
+`config/config.yaml` **하나만** 고치면 됩니다. 코드는 건드리지 않습니다.
+
+```yaml
+qc:
+  min_features: 200
+  max_percent_mt: 5        # snRNA는 거의 0이어야 정상
+batch:
+  method: "harmony"        # harmony | rpca | none
+cluster:
+  select: 0.4              # 최종 해상도
+```
+
+### 4. 실행
+
+```bash
+bash scripts/run_all.sh
+```
+
+단계별로 돌리려면:
+
+```bash
+Rscript scripts/01_load_qc.R
+Rscript scripts/02_doublet.R            # 또는 샘플 하나만: 02_doublet.R SAMPLE_A
+Rscript scripts/03_filter.R
+...
+```
+
+**각 단계는 체크포인트를 남깁니다.** 중간에 멈춰도 다시 실행하면 이어서 갑니다.
+다시 계산하려면 해당 `run/rds/*.rds` 파일을 지우세요.
+
+### 5. 결과
+
+```
+run/
+├── qc/         qc_metrics.tsv · doublet_rates.tsv · qc_cascade.tsv
+├── figures/    qc_violin · elbow · clustree · umap_clusters · umap_batch · marker_dotplot
+├── tables/     hvg.txt · cluster_by_sample.tsv · markers_all.tsv · markers_top.tsv
+├── rds/        단계별 체크포인트
+└── logs/
+```
+
+마지막에 `tables/markers_top.tsv` 를 보고 클러스터마다 세포 유형 이름을 붙이면 됩니다.
+
+---
+
+## 스크립트
+
+| 파일 | 하는 일 |
 |---|---|
-| 파이프라인 정리 · 그림 | ✅ |
-| 단계별 설명 | ✅ |
-| 실행 스크립트 (R / Python) | ⬜ 예정 |
-| 예제 데이터 실행 | ⬜ 예정 |
+| `00_common.R` | 설정 읽기 · 경로 · 체크포인트 · 10x 더블렛 비율표 |
+| `01_load_qc.R` | 10x 행렬 읽기 → Seurat 객체 → QC 지표·그림 |
+| `02_doublet.R` | DoubletFinder (`pK` 자동 탐색, 기대 비율은 10x 로딩표에서) |
+| `03_filter.R` | 더블렛·핵 QC·미토 필터 → 유전자 필터 → 합치기 |
+| `04_normalize.R` | scran size factor + batchelor, 또는 LogNormalize |
+| `05_hvg_scale_pca.R` | HVG → Scaling → PCA (+ Elbow plot) |
+| `06_integrate.R` | 배치 보정 (harmony / rpca / none) |
+| `07_cluster.R` | 이웃 그래프 → 클러스터링 → UMAP (+ clustree) |
+| `08_markers.R` | 클러스터별 마커 + dot plot |
+| `run_all.sh` | 전 단계 순서대로 |
+
+### 설계 원칙
+
+- **설정과 코드를 분리합니다.** 파라미터는 전부 `config/config.yaml` 에 있습니다.
+- **각 단계가 체크포인트를 남깁니다.** 비싼 계산을 두 번 하지 않습니다.
+- **그림이 실패해도 멈추지 않습니다.** 패키지 버전 충돌로 그림 한 장을 못 그려도 계산 결과를 잃지 않습니다.
+- **모든 핵이 걸러지면 이유를 알려주고 멈춥니다.** 어떤 기준이 문제였는지, 이 샘플 중앙값은 얼마인지 함께 출력합니다.
+
+---
+
+## 동작 확인
+
+가짜 데이터로 파이프라인이 끝까지 도는지 확인할 수 있습니다.
+
+```bash
+Rscript tests/make_toy_data.R data/raw 3 300 400   # 샘플 3개 x 세포 300개 x 유전자 400개
+bash scripts/run_all.sh
+```
+
+가짜 데이터는 **배선 점검용**입니다. 생물학적 의미는 없습니다.
+작게 만들었으므로 `config/config.yaml` 에서 `min_features`·`n_hvg`·`n_pcs` 를 낮춰 주세요.
+
+**검증 기록**: R 4.4.3 · Seurat 5.5.1 환경에서 위 가짜 데이터로 **8단계 전부 통과**했습니다
+(`batch.method: rpca`, 약 2분). `clustree` 그림 한 장만 ggplot2 4.x 충돌로 건너뛰었습니다.
 
 ---
 
