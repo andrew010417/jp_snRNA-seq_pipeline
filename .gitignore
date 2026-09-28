@@ -1,0 +1,13 @@
+# 화이트리스트 방식 — 명시한 것만 추적
+*
+!.gitignore
+!README.md
+!docs/
+!docs/**
+!scripts/
+!scripts/**
+# 데이터·중간산출물은 절대 올리지 않음
+*.h5ad
+*.rds
+*.mtx
+*.mtx.gz
